@@ -71,6 +71,12 @@ Install dependencies with pip:
 pip install numpy pandas matplotlib seaborn scikit-learn xgboost shap
 ```
 
+For the Streamlit app, also install:
+
+```bash
+pip install streamlit joblib
+```
+
 ## Usage
 
 1. Clone the repository and navigate to the project folder.
@@ -82,3 +88,113 @@ jupyter notebook Employee_Attrition_Prediction.ipynb
 ```
 
 All figures are automatically saved to `results/figures/`.
+
+## Streamlit Inference App
+
+This project includes a Streamlit web app (`app.py`) for inference on uploaded employee CSV files.
+
+### App Capabilities
+
+- Upload employee CSV files and run inference with the saved Logistic Regression artifacts
+- Display per-row outputs:
+	- `Attrition_Probability`
+	- `Predicted_Attrition`
+	- `Risk_Level`
+- Interactive decision threshold slider that updates prediction labels and evaluation metrics
+- Inference visualizations:
+	- Risk level distribution
+	- Probability distribution (with threshold marker)
+	- Predicted 0/1 count
+- SHAP inference explanations (summary + bar) for threshold-selected high-risk rows
+- Evaluation metrics/plots when uploaded `Attrition` labels are present:
+	- Accuracy, Precision, Recall, F1, ROC-AUC
+	- Confusion Matrix
+	- ROC Curve (with current threshold operating point)
+
+### One-Time Artifact Generation
+
+Before running the app, generate model artifacts from the training script:
+
+```bash
+python3 Employee_Attrition_Prediction.py
+```
+
+This creates:
+
+- `results/artifacts/model.joblib`
+- `results/artifacts/scaler.joblib`
+- `results/artifacts/feature_columns.json`
+
+### Run the App
+
+```bash
+python3 -m streamlit run app.py
+```
+
+### Test Dataset
+
+Use `synthetic_employee_attrition_test.csv` for demo/testing.
+
+### Demo Script (Presentation-Ready)
+
+1. Start app and upload `synthetic_employee_attrition_test.csv`.
+2. Show the top metrics row (predicted count, average probability, threshold, accuracy/precision/recall/F1).
+3. Move the threshold slider and highlight how labels/metrics/confusion matrix update live.
+4. Show SHAP plots to explain drivers for currently high-risk predictions.
+5. Export results with `Download Predictions CSV`.
+
+### Recommended Starting Threshold
+
+On the current balanced synthetic test set, a practical starting threshold is around **0.36** (best F1 in a coarse threshold sweep):
+
+- F1: 0.7933
+- Accuracy: 0.7715
+- Precision: 0.7242
+- Recall: 0.8770
+
+Use this as an initial operating point, then tune based on business cost of false positives vs false negatives.
+
+## Next Steps / Upgrade Roadmap
+
+The current system is end-to-end for training and inference. The following upgrades can make it more production-ready and user-friendly.
+
+### 1) Model and Data Operations
+
+- Add dataset and model versioning so each deployed model is traceable to a specific training dataset and code revision.
+- Track experiment metadata (thresholds, metrics, feature schema, run date) for reproducibility.
+- Save model cards that summarize intended use, known limitations, and evaluation context.
+
+### 2) Reliability and Validation
+
+- Add automated tests for preprocessing, schema alignment, and artifact loading.
+- Add input schema validation in the app (required columns, allowed value formats, null checks).
+- Add CI checks to run linting/tests before merges.
+
+### 3) Deployment and Monitoring
+
+- Containerize the app with Docker for consistent runtime behavior.
+- Add deployment automation (CI/CD) for repeatable releases.
+- Add monitoring for data drift, prediction drift, and runtime errors.
+
+### 4) Agentic Explanation Layer (Recommended)
+
+Add an agentic component that interprets model outputs for end users in plain language.
+
+Proposed capabilities:
+
+- Explain key metrics on the current upload (Accuracy, Precision, Recall, F1, ROC-AUC) in business terms.
+- Summarize figure insights (confusion matrix trade-offs, ROC interpretation, threshold impact).
+- Explain top SHAP drivers for high-risk predictions with concise, user-friendly narratives.
+- Generate role-based summaries (executive summary vs analyst detail view).
+- Provide action-oriented suggestions (for example, retention interventions for high-risk groups).
+
+Implementation note:
+
+- Keep this explanation layer separate from model prediction logic.
+- Use guardrails so explanations are descriptive and evidence-based (no unsupported causal claims).
+
+### 5) Governance and UX Improvements
+
+- Add audit logging for uploads, thresholds used, and generated outputs.
+- Add an optional report export (PDF/HTML) combining metrics, figures, and agentic narrative.
+- Add role-based access if deployed in an enterprise environment.
