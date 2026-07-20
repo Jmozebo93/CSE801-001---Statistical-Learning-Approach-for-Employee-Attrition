@@ -14,6 +14,8 @@ from sklearn.model_selection import cross_val_score, StratifiedKFold
 import json
 import joblib
 import os
+import subprocess
+from datetime import datetime, timezone
 
 
 # In[2]:
@@ -170,6 +172,22 @@ joblib.dump(model, "results/artifacts/model.joblib")
 joblib.dump(scaler, "results/artifacts/scaler.joblib")
 with open("results/artifacts/feature_columns.json", "w") as f:
     json.dump(feature_columns, f)
+
+try:
+    git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+except Exception:
+    git_commit = "unknown"
+
+model_metadata = {
+    "model_name": "LogisticRegression",
+    "model_version": f"logreg-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+    "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+    "feature_count": len(feature_columns),
+    "source_dataset": "WA_Fn-UseC_-HR-Employee-Attrition.csv",
+    "git_commit": git_commit,
+}
+with open("results/artifacts/model_metadata.json", "w") as f:
+    json.dump(model_metadata, f, indent=2)
 
 
 # In[22]:
