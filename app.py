@@ -311,7 +311,10 @@ else:
 
     with ai_tab:
         st.markdown("### AI Summary")
-        st.caption("Phase 1: template-driven explanations. No external API calls are made.")
+        
+        # Initialize session state for on-demand generation
+        if "ai_summaries_generated" not in st.session_state:
+            st.session_state.ai_summaries_generated = False
 
         # Build metrics dict if labels are present
         _metrics = None
@@ -345,16 +348,44 @@ else:
             _top_features = []
 
         _using_llm = bool(_os.environ.get("GEMINI_API_KEY", ""))
-        if _using_llm:
-            st.caption("AI-powered summaries via Google Gemini (falls back to templates if quota exceeded).")
+        
+        # On-demand button
+        _col1, _col2 = st.columns([1, 4])
+        with _col1:
+            if st.button("✨ Generate AI Summaries", use_container_width=True):
+                st.session_state.ai_summaries_generated = True
+        
+        with _col2:
+            if _using_llm:
+                st.caption("Click to generate LLM-powered summaries (uses Gemini API quota).")
+            else:
+                st.caption("Add GEMINI_API_KEY secret to enable AI summaries.")
+        
+        # Show either AI summaries (if generated) or static templates (default)
+        if st.session_state.ai_summaries_generated and _using_llm:
+            st.info("Generating AI-powered summaries... (this may take a few seconds)")
+            try:
+                st.markdown(llm_upload_summary(results_df, threshold, true_labels, _metrics))
+                st.divider()
+                st.markdown(llm_metrics_explanation(_metrics))
+                st.divider()
+                st.markdown(llm_shap_explanation(_top_features))
+                st.success("✅ AI summaries generated! (Responses are cached for this data.)")
+            except Exception as e:
+                st.error(f"Error generating AI summaries: {str(e)}")
+                st.info("Falling back to template summaries:")
+                st.markdown(build_upload_summary(results_df, threshold, true_labels, _metrics))
+                st.divider()
+                st.markdown(build_metrics_explanation(_metrics))
+                st.divider()
+                st.markdown(build_shap_explanation(_top_features))
         else:
-            st.caption("Template summaries (add GEMINI_API_KEY secret to enable AI-powered summaries).")
-
-        st.markdown(llm_upload_summary(results_df, threshold, true_labels, _metrics))
-        st.divider()
-        st.markdown(llm_metrics_explanation(_metrics))
-        st.divider()
-        st.markdown(llm_shap_explanation(_top_features))
+            st.markdown("**📋 Template Summaries** (always available, no API calls)")
+            st.markdown(build_upload_summary(results_df, threshold, true_labels, _metrics))
+            st.divider()
+            st.markdown(build_metrics_explanation(_metrics))
+            st.divider()
+            st.markdown(build_shap_explanation(_top_features))
 
     monitoring_event = {
         "app_version": "1.0.0",
