@@ -1,0 +1,8 @@
+{
+  "model_name": "LogisticRegression",
+  "model_version": "logreg-20260720T050235Z",
+  "trained_at_utc": "2026-07-20T05:02:35.560847+00:00",
+  "feature_count": 44,
+  "source_dataset": "WA_Fn-UseC_-HR-Employee-Attrition.csv",
+  "git_commit": "24a5f1f29c8a471eeb2c6d61058fe271ecbc8410"
+}
