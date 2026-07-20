@@ -16,6 +16,14 @@ from sklearn.metrics import (
     roc_curve,
 )
 
+from src.inference_utils import (
+    assign_risk_levels,
+    parse_true_attrition_labels,
+    preprocess_for_inference,
+    validate_input_schema,
+)
+from src.ops_utils import load_model_metadata, write_monitoring_event
+
 # Create a basic page layout
 st.set_page_config(page_title="Employee Attrition Prediction", layout="wide")
 st.title("Employee Attrition Intelligence Dashboard")
@@ -30,47 +38,17 @@ def load_artifacts():
         feature_columns = json.load(f)
     return model, scaler, feature_columns
 
-def preprocess_for_inference(df, scaler, feature_columns):
-    drop_cols = ["EmployeeCount", "Over18", "StandardHours", "EmployeeNumber"]
-    df = df.drop(columns=[c for c in drop_cols if c in df.columns], errors="ignore")
-    # If target exists in uploaded file, remove it before prediction
-    if "Attrition" in df.columns:  
-        df = df.drop(columns=["Attrition"])
-
-    # One-hot encode categorical features
-    df_encoded = pd.get_dummies(df, drop_first=True)
-
-    # Align incoming data to training schema  
-    df_encoded = df_encoded.reindex(columns=feature_columns, fill_value=0)
-    return df_encoded
-
-
-def parse_true_attrition_labels(df):
-    if "Attrition" not in df.columns:
-        return None
-
-    mapping = {
-        "yes": 1,
-        "no": 0,
-        "1": 1,
-        "0": 0,
-        "true": 1,
-        "false": 0,
-    }
-    mapped = df["Attrition"].astype(str).str.strip().str.lower().map(mapping)
-    if mapped.isna().any():
-        return None
-    return mapped.astype(int)
-
-
-def assign_risk_levels(probabilities, threshold):
-    low_cutoff = max(0.0, threshold / 2.0)
-    bins = [-0.01, low_cutoff, threshold, 1.0]
-    return pd.cut(probabilities, bins=bins, labels=["Low", "Medium", "High"], include_lowest=True)
-
 
 # Load the model and feature columns
 model, scaler, feature_columns = load_artifacts()
+model_metadata = load_model_metadata()
+
+with st.sidebar:
+    st.header("Model Metadata")
+    st.write(f"Model: {model_metadata['model_name']}")
+    st.write(f"Version: {model_metadata['model_version']}")
+    st.write(f"Trained At (UTC): {model_metadata['trained_at_utc']}")
+    st.write(f"Feature Count: {model_metadata['feature_count']}")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload Employee Dataset (CSV)", type=["csv"])
@@ -80,6 +58,14 @@ if uploaded_file is None:
 else:
     # Read the uploaded file
     raw_df = pd.read_csv(uploaded_file)
+    missing_columns = validate_input_schema(raw_df)
+    if missing_columns:
+        st.error(
+            "Input schema validation failed. Missing required columns: "
+            + ", ".join(missing_columns)
+        )
+        st.stop()
+
     display_df = raw_df.drop(columns=["Attrition"], errors="ignore")
 
     threshold = st.slider(
@@ -95,7 +81,7 @@ else:
     st.dataframe(display_df.head())
 
     # preprocess for inference
-    X_aligned = preprocess_for_inference(raw_df.copy(), scaler, feature_columns)
+    X_aligned = preprocess_for_inference(raw_df.copy(), feature_columns)
     X_input = scaler.transform(X_aligned)
     proba = model.predict_proba(X_input)[:, 1]
     pred = (proba >= threshold).astype(int)
@@ -192,6 +178,29 @@ else:
         file_name="attrition_predictions.csv",
         mime="text/csv",
     )
+
+    monitoring_event = {
+        "app_version": "1.0.0",
+        "model_version": model_metadata["model_version"],
+        "rows_scored": int(len(results_df)),
+        "threshold": float(threshold),
+        "predicted_leavers": int(results_df["Predicted_Attrition"].sum()),
+        "avg_probability": float(results_df["Attrition_Probability"].mean()),
+        "labels_present": bool(true_labels is not None),
+    }
+    if true_labels is not None:
+        monitoring_event.update(
+            {
+                "accuracy": float(accuracy_score(true_labels, pred)),
+                "precision": float(precision_score(true_labels, pred, zero_division=0)),
+                "recall": float(recall_score(true_labels, pred, zero_division=0)),
+                "f1": float(f1_score(true_labels, pred, zero_division=0)),
+            }
+        )
+
+    if st.button("Log Monitoring Event"):
+        write_monitoring_event(monitoring_event)
+        st.success("Monitoring event saved to results/monitoring/inference_events.jsonl")
 
     # If true labels are present, compute test/evaluation metrics for this uploaded file.
     if true_labels is not None:
