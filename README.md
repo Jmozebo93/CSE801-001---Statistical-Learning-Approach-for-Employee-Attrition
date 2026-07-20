@@ -198,3 +198,62 @@ Implementation note:
 - Add audit logging for uploads, thresholds used, and generated outputs.
 - Add an optional report export (PDF/HTML) combining metrics, figures, and agentic narrative.
 - Add role-based access if deployed in an enterprise environment.
+
+## Productionization Baseline (Implemented)
+
+This repository now includes a first productionization baseline across versioning, validation, CI/CD checks, and monitoring.
+
+### 1) Model Versioning Metadata
+
+Training now writes model metadata to:
+
+- `results/artifacts/model_metadata.json`
+
+Metadata includes:
+
+- model name
+- model version (timestamped)
+- training timestamp (UTC)
+- feature count
+- source dataset
+- git commit hash (when available)
+
+### 2) Input Validation
+
+The Streamlit app validates uploaded schema before inference using `src/inference_utils.py`.
+
+- Missing required columns are reported explicitly.
+- Inference is halted when schema is invalid.
+
+### 3) CI/CD Quality Gate (GitHub Actions)
+
+Workflow file:
+
+- `.github/workflows/ci.yml`
+
+Current checks on push/PR to `main`:
+
+- dependency install from `requirements.txt`
+- Python compile checks (`app.py`, `src/*.py`)
+- unit test execution (`python -m unittest discover -s tests -v`)
+
+### 4) Monitoring Logs
+
+The app now supports monitoring event logging via a UI button.
+
+- Log destination: `results/monitoring/inference_events.jsonl`
+- Captures: app/model version, rows scored, threshold, predicted leavers, average probability
+- Includes test metrics when labels are available
+
+### 5) Test Coverage Added
+
+Unit tests were added for core production utilities:
+
+- `tests/test_inference_utils.py`
+- `tests/test_ops_utils.py`
+
+Run locally:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+```
