@@ -23,6 +23,7 @@ from src.inference_utils import (
     validate_input_schema,
 )
 from src.ops_utils import load_model_metadata, write_monitoring_event
+from src.agent_utils import build_upload_summary, build_metrics_explanation, build_shap_explanation
 
 # Create a basic page layout
 st.set_page_config(page_title="Employee Attrition Prediction", layout="wide")
@@ -142,8 +143,8 @@ else:
     summary_col_3.metric("Avg Attrition Probability", round(float(results_df["Attrition_Probability"].mean()), 4))
     summary_col_4.metric("Threshold", f"{threshold:.2f}")
 
-    overview_tab, analytics_tab, shap_tab, evaluation_tab = st.tabs(
-        ["Overview", "Analytics", "Explainability", "Evaluation"]
+    overview_tab, analytics_tab, shap_tab, evaluation_tab, ai_tab = st.tabs(
+        ["Overview", "Analytics", "Explainability", "Evaluation", "AI Summary"]
     )
 
     with overview_tab:
@@ -294,6 +295,47 @@ else:
                 st.info("ROC-AUC requires both positive and negative labels in uploaded Attrition data.")
         else:
             st.info("No usable Attrition labels found in upload. Show evaluation metrics by uploading a labeled test file.")
+
+    with ai_tab:
+        st.markdown("### AI Summary")
+        st.caption("Phase 1: template-driven explanations. No external API calls are made.")
+
+        # Build metrics dict if labels are present
+        _metrics = None
+        if true_labels is not None:
+            _metrics = {
+                "accuracy": float(accuracy_score(true_labels, pred)),
+                "precision": float(precision_score(true_labels, pred, zero_division=0)),
+                "recall": float(recall_score(true_labels, pred, zero_division=0)),
+                "f1": float(f1_score(true_labels, pred, zero_division=0)),
+            }
+            try:
+                _metrics["roc_auc"] = float(roc_auc_score(true_labels, proba))
+            except ValueError:
+                pass
+
+        # Build SHAP top features list from existing shap_values if available
+        _top_features = []
+        try:
+            _background_size = min(200, len(X_input))
+            _explainer = shap.LinearExplainer(model, X_input[:_background_size])
+            _shap_vals = _explainer.shap_values(X_input)
+            if isinstance(_shap_vals, list):
+                _shap_matrix = _shap_vals[1]
+            else:
+                _shap_matrix = _shap_vals
+            import numpy as _np
+            _mean_abs = _np.abs(_shap_matrix).mean(axis=0)
+            _top_idx = _mean_abs.argsort()[::-1][:10]
+            _top_features = [feature_columns[i] for i in _top_idx]
+        except Exception:
+            _top_features = []
+
+        st.markdown(build_upload_summary(results_df, threshold, true_labels, _metrics))
+        st.divider()
+        st.markdown(build_metrics_explanation(_metrics))
+        st.divider()
+        st.markdown(build_shap_explanation(_top_features))
 
     monitoring_event = {
         "app_version": "1.0.0",
