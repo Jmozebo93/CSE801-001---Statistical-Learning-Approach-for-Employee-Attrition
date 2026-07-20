@@ -36,11 +36,15 @@ def _call_gemini(prompt, fallback_fn, *args, **kwargs):
     """
     model = _get_gemini_model()
     if model is None:
+        print("[DEBUG] Gemini model unavailable, using fallback")
         return fallback_fn(*args, **kwargs)
     try:
+        print("[DEBUG] Calling Gemini API...")
         response = model.generate_content(prompt)
+        print("[DEBUG] Gemini API success")
         return response.text.strip()
-    except Exception:
+    except Exception as e:
+        print(f"[DEBUG] Gemini API failed: {type(e).__name__}: {str(e)}")
         return fallback_fn(*args, **kwargs)
 
 
