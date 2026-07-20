@@ -10,6 +10,8 @@ the API call fails — the rest of the app is never affected.
 """
 
 import os
+import time
+from src.cache import get_cached_response, cache_response
 
 
 def _get_gemini_model():
@@ -41,20 +43,58 @@ def _get_gemini_error():
 def _call_gemini(prompt, fallback_fn, *args, **kwargs):
     """
     Call Gemini with the given prompt. Return the response text.
+    Uses caching to avoid redundant API calls and save quota.
     If anything fails, call fallback_fn(*args, **kwargs) and return that instead.
     """
     global _last_gemini_error
+    
+    # Check cache first
+    cached = get_cached_response(prompt)
+    if cached is not None:
+        _last_gemini_error = None
+        return cached
+    
     model = _get_gemini_model()
     if model is None:
         _last_gemini_error = "Model unavailable (no API key)"
         return fallback_fn(*args, **kwargs)
-    try:
-        response = model.generate_content(prompt)
-        _last_gemini_error = None  # Clear error on success
-        return response.text.strip()
-    except Exception as e:
-        _last_gemini_error = f"{type(e).__name__}: {str(e)}"
-        return fallback_fn(*args, **kwargs)
+    
+    # Try up to 2 times (initial + 1 retry on quota exceeded)
+    for attempt in range(2):
+        try:
+            response = model.generate_content(prompt)
+            response_text = response.text.strip()
+            
+            # Cache successful response
+            cache_response(prompt, response_text)
+            _last_gemini_error = None
+            return response_text
+        except Exception as e:
+            error_str = str(e)
+            _last_gemini_error = f"{type(e).__name__}: {error_str[:100]}"
+            
+            # If quota exceeded and this is first attempt, wait and retry
+            if "ResourceExhausted" in error_str and "429" in error_str and attempt == 0:
+                retry_delay = 1  # Default: wait 1 second
+                if "retry in" in error_str.lower():
+                    try:
+                        import re
+                        match = re.search(r"retry in (\d+(?:\.\d+)?)", error_str)
+                        if match:
+                            retry_delay = float(match.group(1))
+                    except Exception:
+                        pass
+                
+                # Cap the wait time to avoid hanging the app
+                retry_delay = min(retry_delay, 5)
+                time.sleep(retry_delay)
+                continue
+            
+            # All other errors: use fallback immediately
+            return fallback_fn(*args, **kwargs)
+    
+    # If we got here, both attempts failed
+    return fallback_fn(*args, **kwargs)
 
 
 def build_upload_summary(results_df, threshold, true_labels=None, metrics=None):
