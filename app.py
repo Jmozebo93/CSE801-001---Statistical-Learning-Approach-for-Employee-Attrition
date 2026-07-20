@@ -364,21 +364,26 @@ else:
         # Show either AI summaries (if generated) or static templates (default)
         if st.session_state.ai_summaries_generated and _using_llm:
             st.info("Generating AI-powered summaries... (this may take a few seconds)")
-            try:
-                st.markdown(llm_upload_summary(results_df, threshold, true_labels, _metrics))
-                st.divider()
-                st.markdown(llm_metrics_explanation(_metrics))
-                st.divider()
-                st.markdown(llm_shap_explanation(_top_features))
-                st.success("✅ AI summaries generated! (Responses are cached for this data.)")
-            except Exception as e:
-                st.error(f"Error generating AI summaries: {str(e)}")
-                st.info("Falling back to template summaries:")
-                st.markdown(build_upload_summary(results_df, threshold, true_labels, _metrics))
-                st.divider()
-                st.markdown(build_metrics_explanation(_metrics))
-                st.divider()
-                st.markdown(build_shap_explanation(_top_features))
+            with st.spinner("Calling Gemini API..."):
+                try:
+                    upload_result = llm_upload_summary(results_df, threshold, true_labels, _metrics)
+                    metrics_result = llm_metrics_explanation(_metrics)
+                    shap_result = llm_shap_explanation(_top_features)
+                    
+                    st.markdown(upload_result)
+                    st.divider()
+                    st.markdown(metrics_result)
+                    st.divider()
+                    st.markdown(shap_result)
+                    st.success("✅ LLM summaries generated! (Responses are cached.)")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+                    st.info("Showing template summaries instead:")
+                    st.markdown(build_upload_summary(results_df, threshold, true_labels, _metrics))
+                    st.divider()
+                    st.markdown(build_metrics_explanation(_metrics))
+                    st.divider()
+                    st.markdown(build_shap_explanation(_top_features))
         else:
             st.markdown("**📋 Template Summaries** (always available, no API calls)")
             st.markdown(build_upload_summary(results_df, threshold, true_labels, _metrics))

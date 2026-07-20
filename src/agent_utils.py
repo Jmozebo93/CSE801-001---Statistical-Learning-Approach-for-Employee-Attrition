@@ -40,11 +40,16 @@ def _get_gemini_error():
     return _last_gemini_error
 
 
+class GeminiFallbackError(Exception):
+    """Raised when Gemini API fails and we fall back to static templates."""
+    pass
+
+
 def _call_gemini(prompt, fallback_fn, *args, **kwargs):
     """
     Call Gemini with the given prompt. Return the response text.
     Uses caching to avoid redundant API calls and save quota.
-    If anything fails, call fallback_fn(*args, **kwargs) and return that instead.
+    Raises GeminiFallbackError if API fails so caller knows it fell back.
     """
     global _last_gemini_error
     
@@ -57,7 +62,7 @@ def _call_gemini(prompt, fallback_fn, *args, **kwargs):
     model = _get_gemini_model()
     if model is None:
         _last_gemini_error = "Model unavailable (no API key)"
-        return fallback_fn(*args, **kwargs)
+        raise GeminiFallbackError(_last_gemini_error)
     
     # Try up to 2 times (initial + 1 retry on quota exceeded)
     for attempt in range(2):
@@ -75,7 +80,7 @@ def _call_gemini(prompt, fallback_fn, *args, **kwargs):
             
             # If quota exceeded and this is first attempt, wait and retry
             if "ResourceExhausted" in error_str and "429" in error_str and attempt == 0:
-                retry_delay = 1  # Default: wait 1 second
+                retry_delay = 1
                 if "retry in" in error_str.lower():
                     try:
                         import re
@@ -85,16 +90,15 @@ def _call_gemini(prompt, fallback_fn, *args, **kwargs):
                     except Exception:
                         pass
                 
-                # Cap the wait time to avoid hanging the app
                 retry_delay = min(retry_delay, 5)
                 time.sleep(retry_delay)
                 continue
             
-            # All other errors: use fallback immediately
-            return fallback_fn(*args, **kwargs)
+            # All other errors: raise so caller knows it failed
+            raise GeminiFallbackError(_last_gemini_error)
     
     # If we got here, both attempts failed
-    return fallback_fn(*args, **kwargs)
+    raise GeminiFallbackError("API call failed after retry")
 
 
 def build_upload_summary(results_df, threshold, true_labels=None, metrics=None):
@@ -271,7 +275,10 @@ Facts:
 - High risk: {risk_counts.get('High', 0)}, Medium: {risk_counts.get('Medium', 0)}, Low: {risk_counts.get('Low', 0)}
 - {metrics_line if metrics_line else 'No ground-truth labels provided.'}
 """
-    return _call_gemini(prompt, build_upload_summary, results_df, threshold, true_labels, metrics)
+    try:
+        return _call_gemini(prompt, build_upload_summary, results_df, threshold, true_labels, metrics)
+    except GeminiFallbackError:
+        return build_upload_summary(results_df, threshold, true_labels, metrics)
 
 
 def llm_metrics_explanation(metrics):
@@ -290,7 +297,10 @@ Metrics:
 - F1 Score: {metrics.get('f1', 'N/A')}
 - ROC-AUC: {metrics.get('roc_auc', 'N/A')}
 """
-    return _call_gemini(prompt, build_metrics_explanation, metrics)
+    try:
+        return _call_gemini(prompt, build_metrics_explanation, metrics)
+    except GeminiFallbackError:
+        return build_metrics_explanation(metrics)
 
 
 def llm_shap_explanation(top_features):
@@ -306,4 +316,7 @@ End with a brief guardrail note that these are statistical patterns, not certain
 
 Top SHAP features: {features_str}
 """
-    return _call_gemini(prompt, build_shap_explanation, top_features)
+    try:
+        return _call_gemini(prompt, build_shap_explanation, top_features)
+    except GeminiFallbackError:
+        return build_shap_explanation(top_features)
