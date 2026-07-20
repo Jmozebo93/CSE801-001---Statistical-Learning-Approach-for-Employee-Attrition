@@ -29,22 +29,30 @@ def _get_gemini_model():
         return None
 
 
+_last_gemini_error = None  # Store last error for debugging
+
+
+def _get_gemini_error():
+    """Return the last Gemini API error, if any."""
+    return _last_gemini_error
+
+
 def _call_gemini(prompt, fallback_fn, *args, **kwargs):
     """
     Call Gemini with the given prompt. Return the response text.
     If anything fails, call fallback_fn(*args, **kwargs) and return that instead.
     """
+    global _last_gemini_error
     model = _get_gemini_model()
     if model is None:
-        print("[DEBUG] Gemini model unavailable, using fallback")
+        _last_gemini_error = "Model unavailable (no API key)"
         return fallback_fn(*args, **kwargs)
     try:
-        print("[DEBUG] Calling Gemini API...")
         response = model.generate_content(prompt)
-        print("[DEBUG] Gemini API success")
+        _last_gemini_error = None  # Clear error on success
         return response.text.strip()
     except Exception as e:
-        print(f"[DEBUG] Gemini API failed: {type(e).__name__}: {str(e)}")
+        _last_gemini_error = f"{type(e).__name__}: {str(e)}"
         return fallback_fn(*args, **kwargs)
 
 

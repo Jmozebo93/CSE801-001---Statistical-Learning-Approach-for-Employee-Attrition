@@ -30,6 +30,7 @@ from src.agent_utils import (
     llm_upload_summary,
     llm_metrics_explanation,
     llm_shap_explanation,
+    _get_gemini_error,
 )
 
 # Create a basic page layout
@@ -349,6 +350,11 @@ else:
             st.caption("AI-powered summaries via Google Gemini.")
         else:
             st.caption("Template summaries (add GEMINI_API_KEY secret to enable AI-powered summaries).")
+        
+        # Debug: Show last Gemini error if one occurred
+        _last_error = _get_gemini_error()
+        if _last_error:
+            st.error(f"**Debug info:** Gemini API error encountered: {_last_error}")
 
         st.markdown(llm_upload_summary(results_df, threshold, true_labels, _metrics))
         st.divider()
