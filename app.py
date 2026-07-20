@@ -23,7 +23,14 @@ from src.inference_utils import (
     validate_input_schema,
 )
 from src.ops_utils import load_model_metadata, write_monitoring_event
-from src.agent_utils import build_upload_summary, build_metrics_explanation, build_shap_explanation
+from src.agent_utils import (
+    build_upload_summary,
+    build_metrics_explanation,
+    build_shap_explanation,
+    llm_upload_summary,
+    llm_metrics_explanation,
+    llm_shap_explanation,
+)
 
 # Create a basic page layout
 st.set_page_config(page_title="Employee Attrition Prediction", layout="wide")
@@ -79,6 +86,12 @@ def load_artifacts():
 # Load the model and feature columns
 model, scaler, feature_columns = load_artifacts()
 model_metadata = load_model_metadata()
+
+# Inject Gemini API key from Streamlit secrets into environment if available
+import os as _os
+if "GEMINI_API_KEY" in st.secrets:
+    _os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+
 
 with st.sidebar:
     st.header("Model Metadata")
@@ -331,11 +344,17 @@ else:
         except Exception:
             _top_features = []
 
-        st.markdown(build_upload_summary(results_df, threshold, true_labels, _metrics))
+        _using_llm = bool(_os.environ.get("GEMINI_API_KEY", ""))
+        if _using_llm:
+            st.caption("AI-powered summaries via Google Gemini.")
+        else:
+            st.caption("Template summaries (add GEMINI_API_KEY secret to enable AI-powered summaries).")
+
+        st.markdown(llm_upload_summary(results_df, threshold, true_labels, _metrics))
         st.divider()
-        st.markdown(build_metrics_explanation(_metrics))
+        st.markdown(llm_metrics_explanation(_metrics))
         st.divider()
-        st.markdown(build_shap_explanation(_top_features))
+        st.markdown(llm_shap_explanation(_top_features))
 
     monitoring_event = {
         "app_version": "1.0.0",
