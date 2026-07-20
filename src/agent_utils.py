@@ -45,11 +45,13 @@ class GeminiFallbackError(Exception):
     pass
 
 
-def _call_gemini(prompt, fallback_fn, *args, **kwargs):
+def _call_gemini(prompt, fallback_fn=None):
     """
     Call Gemini with the given prompt. Return the response text.
     Uses caching to avoid redundant API calls and save quota.
-    Raises GeminiFallbackError if API fails so caller knows it fell back.
+    Raises GeminiFallbackError if API fails so app.py can handle fallback.
+    
+    Note: fallback_fn parameter is deprecated and ignored. All failures raise GeminiFallbackError.
     """
     global _last_gemini_error
     
@@ -275,10 +277,7 @@ Facts:
 - High risk: {risk_counts.get('High', 0)}, Medium: {risk_counts.get('Medium', 0)}, Low: {risk_counts.get('Low', 0)}
 - {metrics_line if metrics_line else 'No ground-truth labels provided.'}
 """
-    try:
-        return _call_gemini(prompt, build_upload_summary, results_df, threshold, true_labels, metrics)
-    except GeminiFallbackError:
-        return build_upload_summary(results_df, threshold, true_labels, metrics)
+    return _call_gemini(prompt, None)
 
 
 def llm_metrics_explanation(metrics):
@@ -297,10 +296,7 @@ Metrics:
 - F1 Score: {metrics.get('f1', 'N/A')}
 - ROC-AUC: {metrics.get('roc_auc', 'N/A')}
 """
-    try:
-        return _call_gemini(prompt, build_metrics_explanation, metrics)
-    except GeminiFallbackError:
-        return build_metrics_explanation(metrics)
+    return _call_gemini(prompt, None)
 
 
 def llm_shap_explanation(top_features):
@@ -316,7 +312,4 @@ End with a brief guardrail note that these are statistical patterns, not certain
 
 Top SHAP features: {features_str}
 """
-    try:
-        return _call_gemini(prompt, build_shap_explanation, top_features)
-    except GeminiFallbackError:
-        return build_shap_explanation(top_features)
+    return _call_gemini(prompt, None)
