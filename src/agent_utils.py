@@ -16,6 +16,7 @@ def _get_gemini_model():
     """
     Return a configured Gemini GenerativeModel, or None if unavailable.
     Reads the key from the environment variable GEMINI_API_KEY.
+    Uses gemini-2.0-flash, the current supported model (gemini-1.5-flash is deprecated).
     """
     try:
         import google.generativeai as genai  # noqa: PLC0415
@@ -24,7 +25,7 @@ def _get_gemini_model():
         if not api_key:
             return None
         genai.configure(api_key=api_key)
-        return genai.GenerativeModel("gemini-1.5-flash")
+        return genai.GenerativeModel("gemini-2.0-flash")
     except Exception:
         return None
 
