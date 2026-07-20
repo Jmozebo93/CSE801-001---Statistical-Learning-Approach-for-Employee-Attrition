@@ -1,10 +1,47 @@
 """
 agent_utils.py
 
-Phase 1 agentic component: static explanation builders.
-All functions return plain English strings derived from model outputs.
-No LLM calls are made in Phase 1 — explanations are template-driven.
+Agentic component helpers.
+Phase 1: static template-driven explanations (no API required).
+Phase 2: LLM-enhanced summaries via Google Gemini (requires GEMINI_API_KEY secret).
+
+LLM functions fall back to static templates gracefully if the key is missing or
+the API call fails — the rest of the app is never affected.
 """
+
+import os
+
+
+def _get_gemini_model():
+    """
+    Return a configured Gemini GenerativeModel, or None if unavailable.
+    Reads the key from the environment variable GEMINI_API_KEY.
+    """
+    try:
+        import google.generativeai as genai  # noqa: PLC0415
+
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        if not api_key:
+            return None
+        genai.configure(api_key=api_key)
+        return genai.GenerativeModel("gemini-1.5-flash")
+    except Exception:
+        return None
+
+
+def _call_gemini(prompt, fallback_fn, *args, **kwargs):
+    """
+    Call Gemini with the given prompt. Return the response text.
+    If anything fails, call fallback_fn(*args, **kwargs) and return that instead.
+    """
+    model = _get_gemini_model()
+    if model is None:
+        return fallback_fn(*args, **kwargs)
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception:
+        return fallback_fn(*args, **kwargs)
 
 
 def build_upload_summary(results_df, threshold, true_labels=None, metrics=None):
@@ -147,3 +184,73 @@ def build_shap_explanation(top_features):
     ]
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: LLM-enhanced summaries (fall back to static if key is unavailable)
+# ---------------------------------------------------------------------------
+
+def llm_upload_summary(results_df, threshold, true_labels=None, metrics=None):
+    """Return an LLM-enhanced upload summary, falling back to static template."""
+    static = build_upload_summary(results_df, threshold, true_labels, metrics)
+    total = len(results_df)
+    leavers = int(results_df["Predicted_Attrition"].sum())
+    avg_prob = float(results_df["Attrition_Probability"].mean())
+    risk_counts = results_df["Risk_Level"].value_counts().to_dict()
+
+    metrics_line = ""
+    if metrics:
+        metrics_line = (
+            f"Accuracy: {metrics.get('accuracy', 'N/A'):.1%}, "
+            f"F1: {metrics.get('f1', 'N/A'):.2f}, "
+            f"Recall: {metrics.get('recall', 'N/A'):.1%}. "
+        )
+
+    prompt = f"""You are an HR analytics assistant. Summarize these attrition model results
+in 3-4 clear sentences for an HR manager. Be factual and concise. Do not make causal claims.
+Do not advise on individual employment decisions.
+
+Facts:
+- Employees scored: {total}
+- Predicted leavers: {leavers} ({leavers / total * 100:.1f}%)
+- Average attrition probability: {avg_prob:.1%}
+- Decision threshold: {threshold:.2f}
+- High risk: {risk_counts.get('High', 0)}, Medium: {risk_counts.get('Medium', 0)}, Low: {risk_counts.get('Low', 0)}
+- {metrics_line if metrics_line else 'No ground-truth labels provided.'}
+"""
+    return _call_gemini(prompt, build_upload_summary, results_df, threshold, true_labels, metrics)
+
+
+def llm_metrics_explanation(metrics):
+    """Return an LLM-enhanced metrics explanation, falling back to static template."""
+    if not metrics:
+        return build_metrics_explanation(metrics)
+
+    prompt = f"""You are an HR analytics assistant. Explain these model evaluation metrics
+in 3-5 plain English sentences for a non-technical HR manager. Do not use jargon.
+Highlight what the numbers mean practically. Do not advise on hiring or firing decisions.
+
+Metrics:
+- Accuracy: {metrics.get('accuracy', 'N/A')}
+- Precision: {metrics.get('precision', 'N/A')}
+- Recall: {metrics.get('recall', 'N/A')}
+- F1 Score: {metrics.get('f1', 'N/A')}
+- ROC-AUC: {metrics.get('roc_auc', 'N/A')}
+"""
+    return _call_gemini(prompt, build_metrics_explanation, metrics)
+
+
+def llm_shap_explanation(top_features):
+    """Return an LLM-enhanced SHAP explanation, falling back to static template."""
+    if not top_features:
+        return build_shap_explanation(top_features)
+
+    features_str = ", ".join(top_features[:5])
+    prompt = f"""You are an HR analytics assistant. Explain in 3-4 plain English sentences
+why these employee features are associated with attrition risk according to a SHAP analysis.
+Do not make causal claims. Do not advise on individual employees.
+End with a brief guardrail note that these are statistical patterns, not certainties.
+
+Top SHAP features: {features_str}
+"""
+    return _call_gemini(prompt, build_shap_explanation, top_features)
