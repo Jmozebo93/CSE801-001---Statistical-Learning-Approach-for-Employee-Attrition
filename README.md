@@ -131,6 +131,21 @@ This creates:
 python3 -m streamlit run app.py
 ```
 
+### Streamlit Community Cloud Deployment
+
+For Streamlit Community Cloud, use `requirements.txt` for dependencies and set the Python version directly in the Streamlit deployment UI.
+
+Recommended deployment flow:
+
+1. Push the latest `main` branch to GitHub.
+2. In Streamlit Community Cloud, create a **new app** from this repository.
+3. Before deploying, open **Advanced settings**.
+4. Set **Python version** to **3.11**.
+5. Set the main file path to `app.py`.
+6. Deploy and verify the app with a sample upload.
+
+If a previous deployment was created with a different interpreter version, delete that app and redeploy from scratch with Python 3.11 selected in Advanced settings.
+
 ### Test Dataset
 
 Use `synthetic_employee_attrition_test.csv` for demo/testing.
@@ -175,6 +190,7 @@ The current system is end-to-end for training and inference. The following upgra
 - Containerize the app with Docker for consistent runtime behavior.
 - Add deployment automation (CI/CD) for repeatable releases.
 - Add monitoring for data drift, prediction drift, and runtime errors.
+- For Streamlit Community Cloud specifically, treat the Python version as a platform setting and pin it to 3.11 during app creation.
 
 ### 4) Agentic Explanation Layer (Recommended)
 
