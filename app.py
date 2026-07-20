@@ -166,15 +166,22 @@ else:
         with right_col:
             st.markdown('<div class="section-card">', unsafe_allow_html=True)
             st.markdown("### Uploaded Dataset Preview")
-            st.dataframe(display_df.head(), use_container_width=True)
+            st.dataframe(display_df.head(), width="stretch")
             st.markdown("### Scored Employee Predictions")
-            st.dataframe(results_df, use_container_width=True)
+            st.dataframe(results_df, width="stretch")
             st.markdown('</div>', unsafe_allow_html=True)
 
     with analytics_tab:
         fig, ax = plt.subplots(figsize=(8, 4))
         risk_counts = results_df["Risk_Level"].value_counts().reindex(["Low", "Medium", "High"], fill_value=0)
-        sns.barplot(x=risk_counts.index, y=risk_counts.values, ax=ax, palette=["#2E8B57", "#DAA520", "#CD5C5C"])
+        sns.barplot(
+            x=risk_counts.index,
+            y=risk_counts.values,
+            hue=risk_counts.index,
+            ax=ax,
+            palette=["#2E8B57", "#DAA520", "#CD5C5C"],
+            legend=False,
+        )
         ax.set_xlabel("Risk Level")
         ax.set_ylabel("Employees")
         ax.set_title("Risk Level Distribution")
@@ -191,7 +198,15 @@ else:
 
         fig, ax = plt.subplots(figsize=(6, 4))
         pred_counts = results_df["Predicted_Attrition"].value_counts().sort_index()
-        sns.barplot(x=pred_counts.index.astype(str), y=pred_counts.values, ax=ax, palette=["#4C78A8", "#F58518"])
+        pred_x = pred_counts.index.astype(str)
+        sns.barplot(
+            x=pred_x,
+            y=pred_counts.values,
+            hue=pred_x,
+            ax=ax,
+            palette=["#4C78A8", "#F58518"],
+            legend=False,
+        )
         ax.set_xlabel("Predicted Attrition")
         ax.set_ylabel("Employees")
         ax.set_title("Predicted Attrition Count (0/1)")
